@@ -1,10 +1,19 @@
-import { MongoClient } from "mongodb"
+import {
+  connectDataBase,
+  getAllDocumenst,
+  insertDocument,
+} from "../../../helpers/db-utils"
 
 async function handler(req, res) {
   const eventId = req.query.eventId
-  const client = await MongoClient.connect(
-    "mongodb+srv://Majdi:DLoutFnXU7oEmjko@cluster0.msrhy.mongodb.net/events?retryWrites=true&w=majority"
-  )
+  let client
+  try {
+    client = await connectDataBase()
+  } catch (error) {
+    res.status(500).json({ message: "connecting to the database failed" })
+    return
+  }
+
   if (req.method === "POST") {
     // add serverside validation
     const { email, name, text } = req.body
@@ -16,6 +25,7 @@ async function handler(req, res) {
       text.trim() === ""
     ) {
       res.status(422).json({ message: "invalid input" })
+      client.close()
       return
     }
     const newComment = {
@@ -24,19 +34,23 @@ async function handler(req, res) {
       text,
       eventId,
     }
-    const db = client.db()
-    const result = await db.collection("comments").insertOne(newComment)
-    console.log(result)
-    res.status(201).json({ message: "added comment!", newComment })
+    let result
+    try {
+      result = await insertDocument(client, "comments", newComment)
+      newComment._id = result.insertedId
+      res.status(201).json({ message: "added comment!", newComment })
+    } catch (error) {
+      res.status(500).json({ message: "inserted comment failed failed" })
+    }
   }
   if (req.method === "GET") {
-    const db = client.db()
-    const documents = await db
-      .collection("comments")
-      .find()
-      .sort({ _id: -1 })
-      .toArray()
-    res.status(201).json({ comments: documents })
+    let documents
+    try {
+      documents = await getAllDocumenst(client, "comments", { _id: -1 })
+      res.status(201).json({ comments: documents })
+    } catch (error) {
+      res.status(500).json({ message: "getting comments failed" })
+    }
   }
   client.close()
 }
